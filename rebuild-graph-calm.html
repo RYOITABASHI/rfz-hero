@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Rebuild — Rebuild Factoryz inc.</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; background:#ffffff; }
+  #stage { position:fixed; inset:0; touch-action:none; cursor:grab; }
+  #stage.dragging { cursor:grabbing; }
+  .ui { position:fixed; z-index:10; font-family:"Noto Serif JP","Hiragino Mincho ProN","Yu Mincho",serif; color:#a39a8d; user-select:none; -webkit-user-select:none; }
+  #sig { right:20px; bottom:20px; font-size:11px; letter-spacing:.22em; color:#b3aa9c; pointer-events:none; }
+  #reset { left:20px; bottom:16px; font-size:11px; letter-spacing:.18em; color:#a39a8d; background:none; border:none; border-bottom:1px solid #ddd5c8; padding:2px 1px; cursor:pointer; font-family:inherit; }
+  #reset:hover { color:#6f6656; }
+  #crackLink { left:50%; bottom:22px; transform:translateX(-50%); font-size:12px; letter-spacing:.16em; color:#8a8175; text-decoration:none; border-bottom:1px solid #ddd5c8; padding-bottom:2px; white-space:nowrap; opacity:0; pointer-events:none; transition:opacity 1.4s ease; }
+  #crackLink.shown { opacity:1; pointer-events:auto; }
+  #crackLink:hover { color:#013968; }
+  #count { right:20px; bottom:46px; font-size:10px; letter-spacing:.22em; color:#b3aa9c; pointer-events:none; }
+  .sr-only { position:absolute; width:1px; height:1px; margin:-1px; padding:0; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; border:0; }
+  @media (max-width:640px) { #count { right:14px; bottom:42px; } }
+  @media (max-width:640px) {
+    #reset { left:14px; bottom:14px; }
+    #sig { right:14px; bottom:16px; letter-spacing:.14em; }
+    #crackLink { bottom:50px; }
+  }
+</style>
+</head>
+<body>
+<canvas id="stage"></canvas>
+<button id="reset" class="ui" type="button">reset</button>
+<div id="count" class="ui">54 / 54</div>
+<div id="sig" class="ui">Rebuild Factoryz inc.</div>
+<!-- the diagram's words as text (reading aid; always all 54, centre word excluded) -->
+<ul class="sr-only" aria-label="words in this diagram">
+  <li>modernize</li><li>overhaul</li><li>reanimate</li><li>reassemble</li><li>reawaken</li><li>rebirth</li><li>reborn</li><li>reclaim</li><li>recompose</li><li>reconfigure</li><li>reconstruct</li><li>recover</li><li>recreate</li><li>redevelop</li><li>rediscover</li><li>redraw</li><li>reemerge</li><li>reestablish</li><li>refashion</li><li>refit</li><li>reframe</li><li>refresh</li><li>refurbish</li><li>regenerate</li><li>rehabilitate</li><li>rehouse</li><li>reimagine</li><li>reinvent</li><li>reinvigorate</li><li>rejuvenate</li><li>rekindle</li><li>remake</li><li>remodel</li><li>renew</li><li>renewal</li><li>renovate</li><li>reorganize</li><li>reorient</li><li>repair</li><li>replant</li><li>reshape</li><li>restoration</li><li>restore</li><li>restructure</li><li>resurface</li><li>resurrect</li><li>rethink</li><li>retouch</li><li>revitalize</li><li>revival</li><li>revive</li><li>rewire</li><li>rework</li><li>transform</li>
+</ul>
+<a id="crackLink" class="ui" href="https://www.rebuildfactoryz.com/not-found" target="_top">……亀裂の先へ</a>
+
+<script>
+(function(){
+"use strict";
+var NAVY = "#013968";
+var BURGUNDY = ["#9a5a5e","#a06a63","#8f4f58","#a5716a"];
+var GRAY = ["#8a8175","#7d7468","#948a7a","#857a6a"];
+
+/* ---------- shared site state (single localStorage record, key "rfz") ----
+   Flags only — never answers. Read by every embed; written on deliberate
+   actions. Expiry always falls back to a clean slate. If storage is
+   unavailable the hero simply behaves as a fresh visit. */
+var RFZ_KEY = "rfz";
+function rfzLoad(){
+  var raw = null;
+  try { raw = window.localStorage.getItem(RFZ_KEY); } catch(e) { return { ok:false, flags:{}, updated:0, rebuiltAt:0, keys:{} }; }
+  if(!raw) return { ok:true, flags:{}, updated:0, rebuiltAt:0, keys:{} };
+  var s = null;
+  try { s = JSON.parse(raw); } catch(e) { s = null; }
+  if(!s || s.v !== 1 || !s.flags) return { ok:true, flags:{}, updated:0, rebuiltAt:0, keys:{} };
+  var f = s.flags, now = Date.now(), wipe = false;
+  var lv = f.REBUILT ? 99 : f.RETURNED ? 5 : f.PASS ? 4 : (f.PLACE && f.PERSON) ? 3 : (f.PLACE || f.PERSON) ? 2 : (f.TAKEN || f.OPENED) ? 1 : 0;
+  if(f.REBUILT){ if(s.rebuiltAt && now - s.rebuiltAt > 30*24*3600*1000) wipe = true; }
+  else if(lv >= 2){ if(now - (s.updated||0) > 14*24*3600*1000) wipe = true; }
+  else if(lv === 1){ if(now - (s.updated||0) > 24*3600*1000) wipe = true; }
+  if(wipe){ try { window.localStorage.removeItem(RFZ_KEY); } catch(e) {} return { ok:true, flags:{}, updated:0, rebuiltAt:0, keys:{} }; }
+  return { ok:true, flags:f, updated:s.updated||0, rebuiltAt:s.rebuiltAt||0, keys:s.keys||{} };
+}
+function rfzSave(st){
+  try { window.localStorage.setItem(RFZ_KEY, JSON.stringify({ v:1, flags:st.flags, updated:st.updated||0, rebuiltAt:st.rebuiltAt||0, keys:st.keys||{} })); } catch(e) {}
+}
+var rfz = rfzLoad();
+/* the three navy words are gone (held by the visitor) until they are
+   returned on /not-found or the record expires */
+var takenPersisted = !!(rfz.flags.TAKEN && !rfz.flags.RETURNED && !rfz.flags.REBUILT);
+var countEl = null;
+function updateCount(){
+  if(!countEl) countEl = document.getElementById("count");
+  if(countEl) countEl.textContent = (54 - (takenPersisted ? 3 : seqIdx)) + " / 54";
+}
+
+/* ----- relation tree: English "re-" family, 54 unique words, each once ----- */
+var TREE = {
+  label:"Rebuild", root:true, children:[
+    { label:"reconstruct", navy:true, children:[
+      { label:"reassemble", children:[ {label:"reframe"} ] },
+      { label:"reconfigure", children:[ {label:"restructure"}, {label:"reorganize"} ] },
+      { label:"recompose", children:[ {label:"redraw"} ] }
+    ]},
+    { label:"restore", navy:true, children:[
+      { label:"repair", children:[ {label:"overhaul"}, {label:"resurface"} ] },
+      { label:"refurbish", children:[ {label:"retouch"} ] },
+      { label:"restoration", children:[ {label:"recover"} ] }
+    ]},
+    { label:"renovate", children:[
+      { label:"remodel", children:[ {label:"refit"}, {label:"rewire"} ] },
+      { label:"modernize" },
+      { label:"rehouse", children:[ {label:"replant"} ] }
+    ]},
+    { label:"revive", children:[
+      { label:"reawaken", children:[ {label:"reanimate"} ] },
+      { label:"rebirth", children:[ {label:"reborn"} ] },
+      { label:"reemerge", children:[ {label:"rediscover"} ] },
+      { label:"revival" }
+    ]},
+    { label:"renew", children:[
+      { label:"refresh" },
+      { label:"rejuvenate", children:[ {label:"reinvigorate"}, {label:"revitalize"} ] },
+      { label:"renewal", children:[ {label:"reestablish"} ] }
+    ]},
+    { label:"reinvent", navy:true, children:[
+      { label:"reimagine", children:[ {label:"reorient"} ] },
+      { label:"recreate", children:[ {label:"refashion"} ] }
+    ]},
+    { label:"rethink", children:[
+      { label:"rework" }
+    ]},
+    { label:"transform", children:[
+      { label:"reshape" },
+      { label:"regenerate", children:[ {label:"rehabilitate"} ] }
+    ]},
+    { label:"remake", children:[
+      { label:"redevelop" }
+    ]},
+    { label:"reclaim", children:[
+      { label:"rekindle" },
+      { label:"resurrect" }
+    ]}
+  ]
+};
+/* branches whose second ring opens during autoplay (keeps the resting
+   diagram at 29 words; every other branch is tap-to-open) */
+var AUTO_BRANCHES = ["reconstruct","restore","renovate","revive","renew","reinvent"];
+
+/* ---------- canvas setup ---------- */
+var canvas = document.getElementById("stage");
+var ctx = canvas.getContext("2d");
+var canFilter = false;
+try { canFilter = ("filter" in ctx); } catch(e) { canFilter = false; }
+var W=0, H=0, DPR=1;
+function resize(){
+  DPR = Math.min(window.devicePixelRatio||1, 2);
+  W = window.innerWidth; H = window.innerHeight;
+  canvas.width = W*DPR; canvas.height = H*DPR;
+  canvas.style.width = W+"px"; canvas.style.height = H+"px";
+}
+window.addEventListener("resize", function(){ resize(); wake(); });
+resize();
+
+var SERIF = '"Noto Serif JP","Hiragino Mincho ProN","Yu Mincho","YuMincho",serif';
+function unit(){ return Math.max(0.72, Math.min(1.25, Math.min(W,H)/760)); }
+function fontFor(n){
+  var u = unit(), s;
+  if(n.root) s = 54*u;
+  else if(n.depth===1) s = 25*u;
+  else if(n.depth===2) s = 20*u;
+  else s = 16.5*u;
+  return (n.navy||n.root? "600 ":"500 ") + s + "px " + SERIF;
+}
+function measure(n){
+  ctx.font = fontFor(n);
+  n.w = ctx.measureText(n.label).width;
+  n.r = n.w/2 + 14*unit() + (n.root? 40*unit() : 0);
+  n.hh = (n.root? 30:16)*unit();
+}
+/* link rest lengths: source values x1.55 (as shipped) x1.20 (calm spacing) */
+function restFor(depth){
+  var base = depth===1? 150 : depth===2? 118 : 96;
+  return base * unit() * 1.86;
+}
+
+/* ---------- graph state ---------- */
+var nodes=[], links=[], byLabel={};
+var view = { s:1, ox:0, oy:0 };
+var Rlim = 900;
+var reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+function makeNode(def, parent, depth){
+  var n = {
+    label:def.label, root:!!def.root, navy:!!def.navy, depth:depth,
+    taken: !!(takenPersisted && def.navy),
+    def:def, parent:parent||null, kids:[], spawnedCount:0, spawnedLabels:{},
+    x:0,y:0, tx:0, ty:0, vx:0, vy:0, born:0, pulse:0, shimmer:0, drag:false, glide:null,
+    color: def.navy ? NAVY : (Math.random()<0.52 ? BURGUNDY[(Math.random()*BURGUNDY.length)|0] : GRAY[(Math.random()*GRAY.length)|0])
+  };
+  measure(n);
+  return n;
+}
+function hasUnspawned(n){
+  return !!(n.def.children && n.spawnedCount < n.def.children.length);
+}
+
+/* pick a slot for a new child: try angle offsets / distance multipliers and
+   keep the first spot that clears every existing word (using reserved
+   targets for words still gliding), else the least-crowded spot */
+function prespace(parent, ang, dist, n){
+  var offs = [0, 0.3, -0.3, 0.6, -0.6, 0.95, -0.95, 1.3, -1.3];
+  var mults = [1, 1.14, 1.28];
+  var best=null, bestMargin=-1e9;
+  for(var mi=0; mi<mults.length; mi++){
+    for(var oi=0; oi<offs.length; oi++){
+      var a = ang + offs[oi], d = dist * mults[mi];
+      var cx = parent.x + Math.cos(a)*d, cy = parent.y + Math.sin(a)*d;
+      var margin = 1e9;
+      for(var i=0;i<nodes.length;i++){
+        var m = nodes[i];
+        var mx = m.glide? m.tx : m.x, my = m.glide? m.ty : m.y;
+        var dd = Math.hypot(cx-mx, cy-my) - (n.r + m.r)*1.12;
+        if(dd < margin) margin = dd;
+      }
+      if(margin > bestMargin){ bestMargin = margin; best = {x:cx, y:cy}; }
+      if(margin >= 8) return best;
+    }
+  }
+  return best;
+}
+
+function spawnChild(parent, def, instant){
+  var n = makeNode(def, parent, parent.depth+1);
+  var idx = parent.def.children.indexOf(def);
+  var total = parent.def.children.length, ang;
+  if(parent.root){
+    ang = -Math.PI/2 + idx*(Math.PI*2/total);
+  } else {
+    var base = Math.atan2(parent.y, parent.x);
+    var spread = total>1 ? (idx/(total-1)-0.5)*1.9 : 0;
+    ang = base + spread;
+  }
+  var target = prespace(parent, ang, restFor(n.depth), n);
+  n.tx = target.x; n.ty = target.y;
+  nodes.push(n); byLabel[n.label]=n;
+  links.push({a:parent, b:n}); parent.kids.push(n);
+  parent.spawnedCount++; parent.spawnedLabels[def.label]=1;
+  if(instant || reduced){
+    n.x = n.tx; n.y = n.ty; n.born = 1;
+  } else {
+    /* gentle birth: glide along a shallow arc from the parent while the
+       word focuses in — no velocity kick, and gliding words exert no
+       force, so neighbours are never shoved */
+    n.x = parent.x; n.y = parent.y; n.born = 0;
+    var dx = n.tx-parent.x, dy = n.ty-parent.y, dl = Math.hypot(dx,dy)||1;
+    var mx = (parent.x+n.tx)/2, my = (parent.y+n.ty)/2;
+    var px = -dy/dl, py = dx/dl;
+    if(px*mx + py*my < 0){ px = -px; py = -py; }
+    n.glide = { t:0, dur:1.15,
+      fx:parent.x, fy:parent.y,
+      cx:mx + px*dl*0.14, cy:my + py*dl*0.14,
+      tx:n.tx, ty:n.ty };
+  }
+  updateDebug();
+  wake();
+  return n;
+}
+
+/* ---------- autoplay: one word at a time, ~0.9–1.2s apart ---------- */
+var autoPlan=[], autoIdx=0, autoTimerId=null;
+function buildAutoPlan(){
+  autoPlan = [];
+  TREE.children.forEach(function(d){ autoPlan.push({parentLabel:"Rebuild", def:d}); });
+  AUTO_BRANCHES.forEach(function(lbl){
+    var branch = null;
+    TREE.children.forEach(function(d){ if(d.label===lbl) branch = d; });
+    if(branch && branch.children){
+      branch.children.forEach(function(d){ autoPlan.push({parentLabel:lbl, def:d}); });
+    }
+  });
+}
+function autoStep(){
+  if(autoIdx >= autoPlan.length){ autoTimerId = null; return; }
+  var item = autoPlan[autoIdx++];
+  var p = byLabel[item.parentLabel];
+  if(p && !p.spawnedLabels[item.def.label]) spawnChild(p, item.def, false);
+  autoTimerId = setTimeout(autoStep, 900 + Math.random()*300);
+}
+function startAutoplay(){
+  buildAutoPlan(); autoIdx = 0;
+  if(autoTimerId) clearTimeout(autoTimerId);
+  autoTimerId = setTimeout(autoStep, 700);
+}
+
+/* ---------- tap expansion queue: children arrive one by one, gently ---------- */
+var tapQueue=[], tapTimerId=null;
+function tapStep(){
+  var item = tapQueue.shift();
+  if(!item){ tapTimerId = null; return; }
+  if(!item.parent.spawnedLabels[item.def.label]) spawnChild(item.parent, item.def, false);
+  tapTimerId = setTimeout(tapStep, 380);
+}
+function queueChildren(n){
+  if(!n.def.children) return;
+  n.def.children.forEach(function(d){
+    if(!n.spawnedLabels[d.label]) tapQueue.push({parent:n, def:d});
+  });
+  if(!tapTimerId && tapQueue.length) tapStep();
+}
+
+/* ---------- init ---------- */
+var root = null;
+function fitView(){
+  var rout = restFor(1) + restFor(2) + 64*unit();
+  var s = Math.min(1, (Math.min(W,H)*0.48) / rout);
+  view = { s: Math.max(0.4, s), ox:0, oy:0 };
+}
+function init(){
+  nodes = []; links = []; byLabel = {};
+  if(autoTimerId){ clearTimeout(autoTimerId); autoTimerId = null; }
+  if(tapTimerId){ clearTimeout(tapTimerId); tapTimerId = null; }
+  tapQueue = [];
+  if(shimmerTimerId !== null){ clearTimeout(shimmerTimerId); shimmerTimerId = null; }
+  shimmerFired = false; shimmerCancelled = false; shimmerStart = -1;
+  if(takenPersisted){ seqDone = true; seqIdx = NAVY_SEQ.length; }
+  root = makeNode(TREE, null, 0);
+  root.x = 0; root.y = 0; root.tx = 0; root.ty = 0; root.born = 1; root.color = "#2b2b2b";
+  nodes.push(root); byLabel[root.label] = root;
+  if(seqDone) revealCrackLink();
+  updateCount();
+  Rlim = (restFor(1) + restFor(2) + restFor(3)) * 1.08 + 60*unit();
+  fitView();
+  if(reduced){
+    TREE.children.forEach(function(d){ spawnChild(root, d, true); });
+    AUTO_BRANCHES.forEach(function(lbl){
+      var p = byLabel[lbl];
+      if(p) p.def.children.forEach(function(d){ spawnChild(p, d, true); });
+    });
+  } else {
+    startAutoplay();
+  }
+  updateDebug();
+  wake();
+}
+
+/* ---------- physics: runs only while awake; freezes solid at rest ---------- */
+var rafId = null, lastT = 0, stillFrames = 0, settled = false;
+var maxSpeedNow = 0, anyGlide = false, anyPulse = false;
+var polishMode = false, polishSteps = 0, polishCorr = 0;
+function easeInOut(t){ return t<0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2, 3)/2; }
+
+function stepPhysics(dt){
+  var step = Math.min(dt, 0.033), sf = step*60;
+  var i, j, n, m;
+  anyGlide = false; anyPulse = false;
+  /* glides (scripted, force-free) */
+  for(i=0;i<nodes.length;i++){
+    n = nodes[i];
+    if(n.glide){
+      anyGlide = true;
+      n.glide.t += dt / n.glide.dur;
+      var t = Math.min(1, n.glide.t), e = easeInOut(t), u = 1-e, g = n.glide;
+      n.x = u*u*g.fx + 2*u*e*g.cx + e*e*g.tx;
+      n.y = u*u*g.fy + 2*u*e*g.cy + e*e*g.ty;
+      n.born = e;
+      if(t >= 1){ n.glide = null; n.born = 1; }
+    }
+    if(n.pulse > 0){ anyPulse = true; n.pulse = Math.max(0, n.pulse - dt*1.8); }
+  }
+  /* springs */
+  for(i=0;i<links.length;i++){
+    var a = links[i].a, b = links[i].b;
+    if(a.glide || b.glide) continue;
+    var dx = b.x-a.x, dy = b.y-a.y;
+    var dist = Math.sqrt(dx*dx + dy*dy) || 0.001;
+    var f = (dist - restFor(b.depth)) / dist * 0.008 * sf;
+    if(!a.root && !a.drag){ a.vx += dx*f*0.5; a.vy += dy*f*0.5; }
+    if(!b.drag){ b.vx -= dx*f*0.5; b.vy -= dy*f*0.5; }
+  }
+  /* repulsion (+20% distance), centering, containment, integrate */
+  maxSpeedNow = 0;
+  for(i=0;i<nodes.length;i++){
+    n = nodes[i];
+    if(n.root){ n.x = 0; n.y = 0; n.vx = 0; n.vy = 0; continue; }
+    if(n.glide) continue;
+    if(!n.drag){
+      for(j=0;j<nodes.length;j++){
+        if(i===j) continue;
+        m = nodes[j];
+        if(m.glide) continue;
+        var ddx = n.x-m.x, ddy = n.y-m.y;
+        var d2 = ddx*ddx + ddy*ddy;
+        var minD = (n.r + m.r) * 1.08;
+        /* contact-only repulsion (range ~1.07x minD): words at their natural
+           spacing never feel each other, so the web can come to a full stop
+           instead of churn — the long-range field was the old jitter source */
+        if(d2 < minD*minD*1.15 && d2 > 0.0001){
+          var dd = Math.sqrt(d2);
+          var push = (minD/dd) * 0.022 * sf * (m.root? 2.6 : 1);
+          var cap = m.root? 0.6 : 0.3;
+          if(push > cap) push = cap;
+          n.vx += (ddx/dd)*push; n.vy += (ddy/dd)*push;
+        }
+      }
+      n.vx += (0 - n.x) * 0.00022 * sf;
+      n.vy += (0 - n.y) * 0.00022 * sf;
+      var dc = Math.sqrt(n.x*n.x + n.y*n.y);
+      if(dc > Rlim && dc > 0.001){
+        var pull = (dc - Rlim) * 0.008 * sf;
+        n.vx -= (n.x/dc)*pull; n.vy -= (n.y/dc)*pull;
+      }
+      n.vx *= 0.80; n.vy *= 0.80;   /* heavy damping: motion dies out fast */
+      var sp2 = n.vx*n.vx + n.vy*n.vy;
+      if(sp2 < 0.12){ n.vx *= 0.90; n.vy *= 0.90; }  /* stiction: kill limit-cycle creep */
+      n.x += n.vx * sf * 0.55;
+      n.y += n.vy * sf * 0.55;
+    }
+    var sp = Math.sqrt(n.vx*n.vx + n.vy*n.vy);
+    if(sp > maxSpeedNow) maxSpeedNow = sp;
+  }
+}
+
+/* ---------- rendering ---------- */
+function toScreen(x,y){ return [ (x*view.s + W/2 + view.ox), (y*view.s + H/2 + view.oy) ]; }
+function draw(){
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  ctx.fillStyle = "#ffffff"; ctx.fillRect(0,0,W,H);
+  var fEnv = fractureEnv();
+  var fOx = fEnv > 0 ? Math.sin(fractureT*47)*3.2*fEnv : 0;
+  var fOy = fEnv > 0 ? Math.cos(fractureT*39)*2.4*fEnv : 0;
+  ctx.save();
+  ctx.translate(fOx, fOy);
+  var u = unit(), cx = W/2 + view.ox, cy = H/2 + view.oy;
+  /* golden-ratio guide circles (middle ring = first orbit) */
+  ctx.strokeStyle = "rgba(90,75,60,0.055)"; ctx.lineWidth = 1;
+  var phi = 1.618, R1 = restFor(1) * view.s;
+  [R1/phi, R1, R1*phi].forEach(function(r){
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2); ctx.stroke();
+  });
+  /* parent–child links only — no mesh, no washes */
+  ctx.strokeStyle = "rgba(130,105,95,0.20)"; ctx.lineWidth = 1;
+  links.forEach(function(l){
+    var a = Math.min(l.a.born, l.b.born);
+    if(l.a.taken || l.b.taken) a *= 0.35;   /* edges to an empty seat fade back */
+    if(a < 0.05) return;
+    var p1 = toScreen(l.a.x, l.a.y), p2 = toScreen(l.b.x, l.b.y);
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.beginPath(); ctx.moveTo(p1[0], p1[1]); ctx.lineTo(p2[0], p2[1]); ctx.stroke();
+    ctx.restore();
+  });
+  /* words */
+  nodes.forEach(function(n){
+    if(n.born <= 0 || n.taken) return;   /* a taken word leaves an empty seat */
+    var p = toScreen(n.x, n.y);
+    var ease = 1 - Math.pow(1 - n.born, 3);
+    var scale = (0.7 + 0.3*ease) * (1 + n.pulse*0.10) * (1 + (n.shimmer||0)*0.12);
+    ctx.save();
+    if(canFilter){
+      var filt = "";
+      if(n.born < 1) filt = "blur(" + ((1-ease)*2.5).toFixed(2) + "px)";
+      if(n.shimmer > 0) filt += (filt? " " : "") + "brightness(" + (1 + n.shimmer*0.35).toFixed(3) + ")";
+      ctx.filter = filt || "none";
+    }
+    ctx.globalAlpha = ease;
+    ctx.translate(p[0], p[1]);
+    ctx.scale(view.s * scale, view.s * scale);
+    ctx.font = fontFor(n);
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    if(n.root){
+      ctx.fillStyle = "#2b2b2b";
+      try{ ctx.letterSpacing = "6px"; }catch(e){}
+      ctx.fillText("Rebuild", 3, -8*u);
+      try{ ctx.letterSpacing = "2px"; }catch(e){}
+      ctx.font = "400 " + (12.5*u) + "px " + SERIF;
+      ctx.fillStyle = "#a89d8c";
+      ctx.fillText("v. — to build again", 1, 26*u);
+      try{ ctx.letterSpacing = "0px"; }catch(e){}
+    } else {
+      ctx.fillStyle = n.color;
+      ctx.fillText(n.label, 0, 0);
+      if(hasUnspawned(n)){
+        ctx.font = "400 " + (11*u) + "px " + SERIF;
+        ctx.fillStyle = "rgba(140,128,112,0.65)";
+        ctx.fillText("＋", n.w/2 + 10*u, -8*u);
+      }
+    }
+    ctx.restore();
+  });
+  ctx.restore();
+  if(fEnv > 0){
+    ctx.strokeStyle = "rgba(60,55,50," + (0.55*fEnv).toFixed(3) + ")";
+    ctx.lineWidth = 0.8;
+    cracks.forEach(function(pts){
+      ctx.beginPath();
+      pts.forEach(function(p, i){
+        var s = toScreen(p[0], p[1]);
+        if(i === 0) ctx.moveTo(s[0], s[1]); else ctx.lineTo(s[0], s[1]);
+      });
+      ctx.stroke();
+    });
+  }
+}
+
+/* ---------- polish: position-based relaxation to a tidy, frozen layout ----
+   Once motion has nearly died out, velocities are dropped and the layout is
+   finished by direct positional correction (link lengths + overlap removal).
+   This converges unconditionally — no limit-cycle creep — and the moment the
+   corrections fall below a tenth of a pixel the loop stops for good. */
+function polishStep(){
+  var i, j, n, m, corr = 0;
+  for(i=0;i<links.length;i++){
+    var a = links[i].a, b = links[i].b;
+    var dx = b.x-a.x, dy = b.y-a.y;
+    var dist = Math.sqrt(dx*dx + dy*dy) || 0.001;
+    var diff = (dist - restFor(b.depth)) / dist * 0.08;
+    var wa = (a.root || a.drag || a.glide)? 0 : 1, wb = (b.drag || b.glide)? 0 : 1, ws = wa + wb;
+    if(!ws) continue;
+    var mx = dx*diff, my = dy*diff;
+    if(wa){ a.x += mx*(wa/ws); a.y += my*(wa/ws); }
+    if(wb){ b.x -= mx*(wb/ws); b.y -= my*(wb/ws); }
+    var c = Math.abs(mx) + Math.abs(my); if(c > corr) corr = c;
+  }
+  for(i=0;i<nodes.length;i++){
+    n = nodes[i];
+    for(j=i+1;j<nodes.length;j++){
+      m = nodes[j];
+      var ddx = m.x-n.x, ddy = m.y-n.y;
+      var d2 = ddx*ddx + ddy*ddy;
+      var minD = (n.r + m.r) * 1.02;
+      if(d2 < minD*minD && d2 > 0.0001){
+        var dd = Math.sqrt(d2), ov = (minD - dd) / dd * 0.25;
+        var wn = (n.root || n.drag || n.glide)? 0 : 1, wm = (m.drag || m.glide)? 0 : 1, wp = wn + wm;
+        if(!wp) continue;
+        var ox = ddx*ov, oy = ddy*ov;
+        if(wn){ n.x -= ox*(wn/wp); n.y -= oy*(wn/wp); }
+        if(wm){ m.x += ox*(wm/wp); m.y += oy*(wm/wp); }
+        var c2 = Math.abs(ox) + Math.abs(oy); if(c2 > corr) corr = c2;
+      }
+    }
+  }
+  polishCorr = corr;
+}
+
+/* ---------- sleep / wake ---------- */
+function wake(){
+  settled = false;
+  polishMode = false;
+  if(rafId === null){ lastT = 0; stillFrames = 0; rafId = requestAnimationFrame(frame); }
+}
+function freezeSolid(){
+  for(var i=0;i<nodes.length;i++){ nodes[i].vx = 0; nodes[i].vy = 0; }
+  maxSpeedNow = 0;
+  settled = true;
+  draw();
+  updateDebug();
+  if(rafId !== null){ cancelAnimationFrame(rafId); rafId = null; }
+  /* one-time shimmer invitation: ~1s after the first full settle (autoplay
+     finished, nothing queued), the three navy words pulse once in sequence
+     order — no text, no other cue. Cancelled by any pointer/wheel input. */
+  if(!reduced && !seqDone && !shimmerFired && !shimmerCancelled && shimmerTimerId === null &&
+     autoTimerId === null && autoIdx >= autoPlan.length && !tapTimerId){
+    shimmerTimerId = setTimeout(function(){
+      shimmerTimerId = null;
+      if(shimmerCancelled || seqDone) return;
+      shimmerFired = true;
+      shimmerStart = performance.now();
+      wake();
+    }, 1000);
+  }
+}
+var simAcc = 0;
+function frame(ts){
+  rafId = requestAnimationFrame(frame);
+  var dt = lastT? Math.min((ts - lastT)/1000, 1.0) : 0.016;
+  lastT = ts;
+  if(fractureT >= 0){
+    fractureT += dt/1.2;
+    if(fractureT >= 1){ fractureT = -1; revealCrackLink(); }
+  }
+  /* fixed-substep simulation on wall-clock time: the dynamics are identical
+     at any display rate, and stay correct even if rAF is throttled
+     (embedded iframes, low-power mode, returning from a hidden tab) */
+  simAcc += dt;
+  var h = 1/60, nSub = 0;
+  while(simAcc >= h && nSub < 40){
+    if(polishMode){
+      polishStep(); polishSteps++;
+      if(polishCorr < 0.12 || polishSteps > 600){ draw(); freezeSolid(); return; }
+    } else {
+      stepPhysics(h);
+    }
+    simAcc -= h; nSub++;
+  }
+  if(nSub === 40) simAcc = 0;
+  /* shimmer timeline (visual only): each navy word gets one sin-envelope
+     pulse, 0.45s long, staggered 0.55s apart, in sequence order */
+  if(shimmerStart > 0){
+    var sEl = (ts - shimmerStart)/1000;
+    var sTotal = (NAVY_SEQ.length-1)*0.55 + 0.45;
+    if(sEl > sTotal + 0.05){
+      shimmerStart = -1;
+      NAVY_SEQ.forEach(function(l){ var q = byLabel[l]; if(q) q.shimmer = 0; });
+    } else {
+      NAVY_SEQ.forEach(function(l, si){
+        var sn = byLabel[l]; if(!sn) return;
+        var lt = sEl - si*0.55;
+        sn.shimmer = (lt >= 0 && lt <= 0.45) ? Math.sin(Math.PI * lt/0.45) : 0;
+      });
+    }
+  }
+  draw();
+  var blocked = dragNode || anyGlide || anyPulse || fractureT >= 0 || shimmerStart > 0 || Object.keys(pointers).length > 0;
+  if(blocked){ stillFrames = 0; }
+  else if(maxSpeedNow < 0.03){ stillFrames++; }
+  else { stillFrames = 0; }
+  if(!polishMode && !blocked && maxSpeedNow < 0.3 && nodes.length > 1){
+    /* hand over to position-based polish: it finishes the layout exactly
+       and freezes — the resting page is a perfectly still diagram */
+    polishMode = true; polishSteps = 0;
+    for(var i=0;i<nodes.length;i++){ nodes[i].vx = 0; nodes[i].vy = 0; }
+    maxSpeedNow = 0;
+    return;
+  }
+  if(stillFrames >= 20) freezeSolid();
+}
+
+/* ---------- debug / verification hooks (invisible) ---------- */
+function visibleCount(){
+  var c = 0;
+  for(var i=0;i<nodes.length;i++) if(nodes[i].born > 0.95) c++;
+  return c;
+}
+function updateDebug(){
+  document.documentElement.setAttribute("data-visible", String(visibleCount()));
+  document.documentElement.setAttribute("data-total", String(nodes.length));
+  document.documentElement.setAttribute("data-settled", settled? "1" : "0");
+}
+window.__rebuildGraph = {
+  visibleCount: visibleCount,
+  totalCount: function(){ return nodes.length; },
+  maxSpeed: function(){ return maxSpeedNow; },
+  settled: function(){ return settled; },
+  labels: function(){ return nodes.map(function(n){ return n.label; }); },
+  taken: function(){ return takenPersisted; },
+  countText: function(){ var el = document.getElementById("count"); return el ? el.textContent : ""; },
+  navyTap: navyTap
+};
+
+/* ---------- hidden sequence: the three navy words, in declaration order ---------- */
+var NAVY_SEQ = ["reconstruct", "restore", "reinvent"];
+var seqIdx = 0, seqDone = false;
+/* shimmer invitation state (see freezeSolid / frame) */
+var shimmerTimerId = null, shimmerStart = -1, shimmerFired = false, shimmerCancelled = false;
+function cancelShimmer(){
+  shimmerCancelled = true;
+  if(shimmerTimerId !== null){ clearTimeout(shimmerTimerId); shimmerTimerId = null; }
+  if(shimmerStart > 0){
+    shimmerStart = -1;
+    NAVY_SEQ.forEach(function(l){ var n = byLabel[l]; if(n) n.shimmer = 0; });
+  }
+}
+var fractureT = -1;
+function fractureEnv(){ return fractureT < 0 ? 0 : Math.sin(Math.PI * Math.min(1, fractureT)); }
+var cracks = [];
+(function(){
+  for(var i=0;i<7;i++){
+    var ang = (i/7)*Math.PI*2 + 0.35 + Math.random()*0.3;
+    var pts = [[0,0]], x = 0, y = 0, steps = 5 + (i % 3);
+    for(var k=0;k<steps;k++){
+      ang += (Math.random()-0.5)*0.55;
+      var seg = 46 + Math.random()*64;
+      x += Math.cos(ang)*seg; y += Math.sin(ang)*seg;
+      pts.push([x, y]);
+    }
+    cracks.push(pts);
+  }
+})();
+function startFracture(){
+  fractureT = 0;
+  wake();
+}
+function revealCrackLink(){
+  var el = document.getElementById("crackLink");
+  if(el) el.classList.add("shown");
+}
+function navyTap(label){
+  if(seqDone) return;
+  if(label === NAVY_SEQ[seqIdx]){
+    seqIdx++;
+    if(seqIdx >= NAVY_SEQ.length){
+      seqDone = true;
+      /* the three words are now held by the visitor: record it in the
+         shared state (flag TAKEN) and empty their seats as the crack opens */
+      takenPersisted = true;
+      rfz.flags.TAKEN = true;
+      rfz.updated = Date.now();
+      rfzSave(rfz);
+      NAVY_SEQ.forEach(function(l){ var q = byLabel[l]; if(q) q.taken = true; });
+      startFracture();
+    }
+    else {
+      /* faint cue: the next word in the sequence pulses once (~1.08 scale) */
+      var nx = byLabel[NAVY_SEQ[seqIdx]];
+      if(nx && nx.born > 0.6) nx.pulse = 0.8;
+    }
+  } else {
+    seqIdx = 0;
+  }
+  updateCount();
+}
+
+/* ---------- interaction ---------- */
+var hintEl = null;
+var hintGone = false;
+function hideHint(){ hintGone = true; }
+
+var pointers = {}, dragNode = null, dragMoved = 0, downT = 0, downPos = null, pinchD0 = 0, view0 = null;
+function toWorld(px,py){ return [ (px - W/2 - view.ox)/view.s, (py - H/2 - view.oy)/view.s ]; }
+function hit(px,py){
+  var w = toWorld(px,py), best = null, bd = 1e9;
+  for(var i=nodes.length-1;i>=0;i--){
+    var n = nodes[i];
+    if(n.born < 0.6 || n.glide || n.taken) continue;
+    var dx = w[0]-n.x, dy = w[1]-n.y;
+    if(Math.abs(dx) < n.r/view.s*1.15 && Math.abs(dy) < (n.hh+12)/view.s*1.6){
+      var d = dx*dx + dy*dy; if(d < bd){ bd = d; best = n; }
+    }
+  }
+  return best;
+}
+canvas.addEventListener("pointerdown", function(e){
+  cancelShimmer();
+  canvas.setPointerCapture(e.pointerId);
+  pointers[e.pointerId] = {x:e.clientX, y:e.clientY};
+  hideHint();
+  wake();
+  if(Object.keys(pointers).length === 2){
+    var ps = Object.values(pointers);
+    pinchD0 = Math.hypot(ps[0].x-ps[1].x, ps[0].y-ps[1].y);
+    view0 = {s:view.s, ox:view.ox, oy:view.oy, mx:(ps[0].x+ps[1].x)/2, my:(ps[0].y+ps[1].y)/2};
+    if(dragNode){ dragNode.drag = false; dragNode = null; }
+    return;
+  }
+  downT = performance.now(); dragMoved = 0; downPos = {x:e.clientX, y:e.clientY};
+  var n = hit(e.clientX, e.clientY);
+  if(n){ dragNode = n; n.drag = true; }
+  canvas.classList.add("dragging");
+});
+canvas.addEventListener("pointermove", function(e){
+  if(!pointers[e.pointerId]) return;
+  var prev = pointers[e.pointerId];
+  var dx = e.clientX-prev.x, dy = e.clientY-prev.y;
+  pointers[e.pointerId] = {x:e.clientX, y:e.clientY};
+  wake();
+  if(Object.keys(pointers).length === 2 && view0){
+    var ps = Object.values(pointers);
+    var d = Math.hypot(ps[0].x-ps[1].x, ps[0].y-ps[1].y);
+    var mx = (ps[0].x+ps[1].x)/2, my = (ps[0].y+ps[1].y)/2;
+    if(pinchD0 > 0){
+      view.s = Math.min(2.6, Math.max(0.35, view0.s * d/pinchD0));
+      view.ox = view0.ox + (mx - view0.mx);
+      view.oy = view0.oy + (my - view0.my);
+    }
+    return;
+  }
+  dragMoved += Math.abs(dx) + Math.abs(dy);
+  if(dragNode){
+    var w = toWorld(e.clientX, e.clientY);
+    dragNode.x = w[0]; dragNode.y = w[1];
+    dragNode.tx = w[0]; dragNode.ty = w[1];
+    dragNode.vx = 0; dragNode.vy = 0;
+  } else if(downPos){
+    view.ox += dx; view.oy += dy;
+  }
+});
+function endPointer(e){
+  delete pointers[e.pointerId];
+  if(Object.keys(pointers).length < 2) view0 = null;
+  if(dragNode){
+    var wasTap = dragMoved < 7 && (performance.now() - downT) < 350;
+    dragNode.drag = false;
+    if(wasTap){
+      if(dragNode.navy) navyTap(dragNode.label);
+      if(hasUnspawned(dragNode)){ queueChildren(dragNode); }
+      else { dragNode.pulse = 1; wake(); }
+    }
+    dragNode = null;
+  }
+  downPos = null;
+  canvas.classList.remove("dragging");
+}
+canvas.addEventListener("pointerup", endPointer);
+canvas.addEventListener("pointercancel", endPointer);
+canvas.addEventListener("wheel", function(e){
+  cancelShimmer();
+  e.preventDefault();
+  var f = e.deltaY < 0? 1.09 : 0.92;
+  view.s = Math.min(2.6, Math.max(0.35, view.s * f));
+  wake();
+}, {passive:false});
+canvas.addEventListener("dblclick", function(e){
+  if(!hit(e.clientX, e.clientY)){ view.s = Math.min(2.6, view.s * 1.25); wake(); }
+});
+document.getElementById("reset").addEventListener("click", function(){ init(); });
+document.addEventListener("visibilitychange", function(){
+  if(!document.hidden) wake();
+});
+
+init();
+if(document.fonts && document.fonts.ready){
+  document.fonts.ready.then(function(){ nodes.forEach(measure); wake(); });
+}
+})();
+</script>
+</body>
+</html>
